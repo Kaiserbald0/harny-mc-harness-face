@@ -3,4 +3,4 @@ __pycache__/
 *.pyc
 .env
 trace.jsonl
-memory/staging/
+memory/staging/.vscode/
