@@ -4,3 +4,4 @@ __pycache__/
 .env
 trace.jsonl
 memory/staging/.vscode/
+.idea

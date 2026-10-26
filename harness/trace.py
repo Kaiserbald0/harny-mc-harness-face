@@ -1,5 +1,7 @@
 import os
 import time
+from enum import Enum
+
 from pydantic import BaseModel, Field
 
 TRACE_PATH = os.getenv("TRACE_PATH", "trace.jsonl")
@@ -10,6 +12,7 @@ class StepStatus(str, Enum):
     OK = "ok"
     ERROR = "error"
     RETRY = "retry"
+    EMPTY = "empty"
 
 class RunStep(str, Enum):
     PLANNER = "planner"
@@ -19,17 +22,23 @@ class RunStep(str, Enum):
 class TraceRow(BaseModel):
     ts: float = Field(default_factory=time.time)
     run_id: str
+    turn: int
     step: RunStep = RunStep.PLANNER
     status: StepStatus = StepStatus.OK
     role: str
     model: str
     temperature: float
-    input_tokens: int
-    output_tokens: int
-    cost_estimated: float
+    completion_tokens: int
+    prompt_tokens: int
+    total_tokens: int
+    upstream_inference_cost: float
+    upstream_inference_completions_cost: float
+    upstream_inference_prompt_cost: float
     duration_ms: float | None = None
     input_summary: str = Field(min_length=1, max_length=500)
     output: str
+    finish_reason: str
+    model_served: str
 
 def log_step(**fields):
     row = TraceRow(**fields)
