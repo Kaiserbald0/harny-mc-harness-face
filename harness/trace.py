@@ -3,6 +3,7 @@ import time
 from enum import Enum
 
 from pydantic import BaseModel, Field
+from typing import Any
 
 TRACE_PATH = os.getenv("TRACE_PATH", "trace.jsonl")
 if not TRACE_PATH:
@@ -39,6 +40,7 @@ class TraceRow(BaseModel):
     output: str
     finish_reason: str
     model_served: str
+    tool_calls: list[dict[str, Any]] | None = None
 
 def log_step(**fields):
     row = TraceRow(**fields)

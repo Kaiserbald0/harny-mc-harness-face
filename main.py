@@ -3,10 +3,10 @@ from harness.loop import run_loop
 import logging
 import os
 
-from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE
+from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE, TOOL_TESTER
 
 SPEC = """
-Read /etc/hostname using the read_file tool.
+Explore the sandbox and report what you find.
 """
 
 def main():
@@ -17,7 +17,7 @@ def main():
         format="%(asctime)s - %(levelname)s - %(message)s"
     )
 
-    for role in (PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE):
+    for role in (TOOL_TESTER, PLANNER_EXPLORATIVE):
         print(f"\n=== {role['name']} (t={role['temperature']}) ===")
         print(run_loop(spec=SPEC, role=role))
 

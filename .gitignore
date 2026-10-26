@@ -5,3 +5,4 @@ __pycache__/
 trace.jsonl
 memory/staging/.vscode/
 .idea
+sandbox
