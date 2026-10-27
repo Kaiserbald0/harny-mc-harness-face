@@ -1,20 +1,46 @@
 from harness.tool_schemas import ALL_TOOL_SCHEMAS
 
-SYSTEM_PROMPT = """You are a planning agent. Given a coding spec, produce a
-short, concrete, step-by-step plan. Do not write code. Do not explain your
-reasoning. Output only the plan as a numbered list.
+PLANNER_BASE = """You are a planning agent. Given a coding spec, produce an
+implementation plan as a numbered list of steps.
 
-Rules:
-1. Security: call out any auth/permission implications.
-2. Tests: every new behaviour must have a test.
-3. Backwards compatibility: flag anything that breaks an existing API.
+How to write a step:
+- One action per step, imperative mood ("Add X", "Create Y", "Update Z").
+- Concrete enough that an engineer could execute it without asking a follow-up.
+  "Add a GET /health handler returning 200 with {\"status\":\"ok\"}" is good.
+  "Handle the health endpoint" is not.
+- When a general engineering concern applies to this specific spec, express it
+  as a concrete step. Write "Add a test that POST /health returns 405", not
+  "Add tests". Generic restatements of principles are noise — do not include
+  them.
+- If a concern does not apply to this spec (e.g. backwards compatibility for a
+  greenfield service), do not include a step for it.
+
+Output format:
+- A numbered list starting at 1. Nothing else.
+- No preamble, no reasoning, no trailing commentary, no markdown headers,
+  no bold, no code blocks.
+- Every step is one line.
+"""
+
+PLANNER_CONSERVATIVE_PROMPT = PLANNER_BASE + """
+Bias: minimal. Produce the smallest plan that satisfies the spec. Prefer the
+fewest steps, the simplest approach, and the fewest moving parts. Every step
+must be traceable to an explicit requirement in the spec. If in doubt whether
+a step is needed, leave it out.
+"""
+
+PLANNER_EXPLORATIVE_PROMPT = PLANNER_BASE + """
+Bias: thorough. Produce a plan that anticipates what a reviewer would ask
+about: edge cases, error paths, and failure modes the spec implies but does
+not state. Prefer explicit over implicit. If two approaches are viable,
+choose the one that is easier to verify.
 """
 
 PLANNER_CONSERVATIVE = {
     "name": "planner_conservative",
     "model": "cohere/north-mini-code:free",   # swap for whatever free model you like
     "temperature": 0.2,
-    "system_prompt": SYSTEM_PROMPT,
+    "system_prompt": PLANNER_CONSERVATIVE_PROMPT,
     "tools": [],
 }
 
@@ -22,7 +48,7 @@ PLANNER_EXPLORATIVE = {
     "name": "planner_explorative",
     "model": "recursive/flint-v1.0:free",
     "temperature": 0.9,
-    "system_prompt": SYSTEM_PROMPT,
+    "system_prompt": PLANNER_EXPLORATIVE_PROMPT,
     "tools": [],
 }
 

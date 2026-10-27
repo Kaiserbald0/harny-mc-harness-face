@@ -1,24 +1,16 @@
 import logging
-import os
 import time
-import uuid
 
+import openai
 from dotenv import load_dotenv
-from openai import OpenAI
 
 from harness.tool_dispatcher import dispatch_tool_call
 from harness.trace import log_step, RunStep, StepStatus
 
 load_dotenv()
 
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
 
-RUN_ID = str(uuid.uuid4())
-
-def run_loop(spec: str, role: dict, max_turns: int = 3) -> str:
+def run_loop(spec: str, role: dict, client: openai.Client, run_id: str, max_turns: int = 3) -> str:
     logging.info("Starting harness loop")
 
     messages = [
@@ -50,7 +42,7 @@ def run_loop(spec: str, role: dict, max_turns: int = 3) -> str:
         tool_calls = msg.tool_calls or []
 
         log_step(
-            run_id=RUN_ID,
+            run_id=run_id,
             step=RunStep.PLANNER,
             turn=turn,
             role=role["name"],
