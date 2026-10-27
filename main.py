@@ -2,12 +2,10 @@ import uuid
 
 from dotenv import load_dotenv
 from openai import OpenAI
-
-from harness.loop import run_loop
 import logging
 import os
 
-from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE
+from harness.get_plans import get_plans
 from harness.selector import selector
 
 SPEC = """
@@ -28,12 +26,7 @@ def main():
     )
 
     run_id = str(uuid.uuid4())
-    plans: list[str] = []
-    for role in (PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE):
-        print(f"\n=== {role['name']} (t={role['temperature']}) ===")
-        plan = run_loop(spec=SPEC, role=role, run_id=run_id, client=client)
-        plans.append(plan)
-
+    plans = get_plans(spec=SPEC, run_id=run_id, client=client)
     print(f"\n=== {len(plans)} plans ===")
     selected_plan, rational = selector(plans=plans, spec=SPEC, run_id=run_id, client=client)
     print(f"\n=== {selected_plan} selected plans ===")
