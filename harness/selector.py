@@ -60,6 +60,19 @@ def selector(plans: list[str], spec: str, run_id: str, client: openai.Client) ->
 
     turn = 0
 
+    plan_index: int = 0
+    selected_plan: str = plans[0]
+    rationale: str = msg.content
+    try:
+        decision = json.loads(msg.content)
+        idx = int(decision["chosen"]) - 1
+        if 0 <= idx < len(plans):
+            selected_plan = plans[idx]
+            rationale = decision.get("rationale", "")
+            plan_index=idx
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+        pass
+
     log_step(
         run_id=run_id,
         step=RunStep.SELECTOR,
@@ -80,14 +93,8 @@ def selector(plans: list[str], spec: str, run_id: str, client: openai.Client) ->
         model_served=resp.model,
         status=status,
         tool_calls=[],
+        chosen_plan=selected_plan,
+        chosen_index=plan_index,
     )
 
-    try:
-        decision = json.loads(msg.content)
-        idx = int(decision["chosen"]) - 1
-        if 0 <= idx < len(plans):
-            return plans[idx], decision.get("rationale", "")
-    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
-        pass
-    # fallback: the model ignored the format, return first plan + raw output as rationale
-    return plans[0], msg.content
+    return selected_plan, rationale

@@ -41,6 +41,8 @@ class TraceRow(BaseModel):
     finish_reason: str
     model_served: str
     tool_calls: list[dict[str, Any]] | None = None
+    chosen_index: int | None = None
+    chosen_role: str | None = None
 
 def log_step(**fields):
     row = TraceRow(**fields)
