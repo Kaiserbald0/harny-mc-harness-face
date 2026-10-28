@@ -1,3 +1,6 @@
+from pydantic import BaseModel, Field
+
+from harness.models import PLANNER_CONSERVATIVE_MODEL, PLANNER_EXPLORATIVE_MODEL, TOOL_TESTER_MODEL
 from harness.tool_schemas import ALL_TOOL_SCHEMAS
 
 PLANNER_BASE = """You are a planning agent. Given a coding spec, produce an
@@ -35,30 +38,36 @@ about: edge cases, error paths, and failure modes the spec implies but does
 not state. Prefer explicit over implicit. If two approaches are viable,
 choose the one that is easier to verify.
 """
+class Role(BaseModel):
+    name: str
+    model: str
+    temperature: float
+    system_prompt: str
+    tools: list[dict] = Field(default_factory=list)
 
-PLANNER_CONSERVATIVE = {
-    "name": "planner_conservative",
-    "model": "cohere/north-mini-code:free",   # swap for whatever free model you like
-    "temperature": 0.2,
-    "system_prompt": PLANNER_CONSERVATIVE_PROMPT,
-    "tools": [],
-}
+    model_config = {"frozen": True}
 
-PLANNER_EXPLORATIVE = {
-    "name": "planner_explorative",
-    "model": "recursive/flint-v1.0:free",
-    "temperature": 0.9,
-    "system_prompt": PLANNER_EXPLORATIVE_PROMPT,
-    "tools": [],
-}
+PLANNER_CONSERVATIVE = Role(
+    name="planner_conservative",
+    model=PLANNER_CONSERVATIVE_MODEL,
+    temperature=0.2,
+    system_prompt=PLANNER_CONSERVATIVE_PROMPT,
+)
 
-TOOL_TESTER = {
-    "name": "tool_tester",
-    "model": "recursive/flint-v1.0:free",   # must support tool calling
-    "temperature": 0.0,
-    "system_prompt": """You are a test agent. Use the available tools to
+PLANNER_EXPLORATIVE = Role(
+    name="planner_explorative",
+    model=PLANNER_EXPLORATIVE_MODEL,
+    temperature=0.9,
+    system_prompt=PLANNER_EXPLORATIVE_PROMPT
+)
+
+TOOL_TESTER = Role(
+    name="tool_tester",
+    model=TOOL_TESTER_MODEL,
+    temperature=0.0,
+    system_prompt= """You are a test agent. Use the available tools to
 explore the sandbox. Start by listing the current directory. Then read one
 file if present. When you have done both, reply with the single word DONE
 and nothing else.""",
-    "tools": ALL_TOOL_SCHEMAS,
-}
+    tools=ALL_TOOL_SCHEMAS,
+)

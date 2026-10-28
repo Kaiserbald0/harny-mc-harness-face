@@ -4,6 +4,7 @@ import time
 
 import openai
 
+from harness.models import SELECTOR_MODEL
 from harness.trace import StepStatus, log_step, RunStep
 
 SYSTEM_PROMPT = """You are a selector agent. You receive a spec and two candidate
@@ -24,10 +25,10 @@ Respond with JSON only, no prose before or after:
 {"chosen": 1 or 2, "rationale": "<one sentence explaining the choice>"}
 """
 
-MODEL = "dots-studio/dots-3-note-preview:free"
+MODEL = SELECTOR_MODEL
 TEMPERATURE = 0.2
 
-def selector(plans: list[str], spec: str, run_id: str, client: openai.Client) -> tuple[str, str]:
+def selector(plans: list[str], spec: str, run_id: str, client: openai.Client) -> tuple[str, str, int]:
     logging.info("Starting selector")
 
     user_prompt = ""
@@ -60,7 +61,7 @@ def selector(plans: list[str], spec: str, run_id: str, client: openai.Client) ->
 
     turn = 0
 
-    plan_index: int = 0
+    selected_plan_index: int = 0
     selected_plan: str = plans[0]
     rationale: str = msg.content
     try:
@@ -69,7 +70,7 @@ def selector(plans: list[str], spec: str, run_id: str, client: openai.Client) ->
         if 0 <= idx < len(plans):
             selected_plan = plans[idx]
             rationale = decision.get("rationale", "")
-            plan_index=idx
+            selected_plan_index=idx
     except (json.JSONDecodeError, KeyError, ValueError, TypeError):
         pass
 
@@ -94,7 +95,7 @@ def selector(plans: list[str], spec: str, run_id: str, client: openai.Client) ->
         status=status,
         tool_calls=[],
         chosen_plan=selected_plan,
-        chosen_index=plan_index,
+        chosen_index=selected_plan_index,
     )
 
-    return selected_plan, rationale
+    return selected_plan, rationale, selected_plan_index

@@ -6,6 +6,8 @@ import logging
 import os
 
 from harness.get_plans import get_plans
+from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE
+from harness.run_revision import run_revision
 from harness.selector import selector
 
 SPEC = """
@@ -26,11 +28,15 @@ def main():
     )
 
     run_id = str(uuid.uuid4())
-    plans = get_plans(spec=SPEC, run_id=run_id, client=client)
+    roles_list = [PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE]
+    plans = get_plans(spec=SPEC, roles=roles_list, run_id=run_id, client=client)
     print(f"\n=== {len(plans)} plans ===")
-    selected_plan, rational = selector(plans=plans, spec=SPEC, run_id=run_id, client=client)
-    print(f"\n=== {selected_plan} selected plans ===")
-    print(f"\n=== {rational} ===")
+    selected_plan, rational, selected_index = selector(plans=plans, spec=SPEC, run_id=run_id, client=client)
+    print(f"\n=== selected plan: \n {selected_plan} ===")
+    print(f"\n=== rational: \n{rational} ===")
+    chosen_role = roles_list[selected_index]
+    revised_plan = run_revision(plan=selected_plan, role=chosen_role, spec=SPEC, run_id=run_id, client=client)
+    print(f"\n=== revised plan: \n {revised_plan} ===")
 
 if __name__ == "__main__":
     main()

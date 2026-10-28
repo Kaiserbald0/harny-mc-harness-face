@@ -4,30 +4,30 @@ import time
 import openai
 from dotenv import load_dotenv
 
-from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE
+from harness.role import Role
 from harness.tool_dispatcher import dispatch_tool_call
 from harness.trace import log_step, RunStep, StepStatus
 
 load_dotenv()
 
 
-def get_plans(spec: str, client: openai.Client, run_id: str, max_turns: int = 3) -> list[str]:
+def get_plans(spec: str, roles: list[Role], client: openai.Client, run_id: str, max_turns: int = 3) -> list[str]:
     logging.info("Starting harness loop")
     plans: list[str] = []
-    for role in (PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE):
-        print(f"\n=== {role['name']} (t={role['temperature']}) ===")
+    for role in roles:
+        print(f"\n=== {role.name} (t={role.temperature}) ===")
         messages = [
-            {"role": "system", "content": role["system_prompt"]},
+            {"role": "system", "content": role.system_prompt},
             {"role": "user", "content": spec},
         ]
-        tools = role.get("tools", [])
+        tools = role.tools
 
         final_text = ""
         for turn in range(max_turns):
             t0 = time.time()
             kwargs = {
-                "model": role["model"],
-                "temperature": role["temperature"],
+                "model": role.model,
+                "temperature": role.temperature,
                 "messages": messages
             }
             if tools:
@@ -48,9 +48,9 @@ def get_plans(spec: str, client: openai.Client, run_id: str, max_turns: int = 3)
                 run_id=run_id,
                 step=RunStep.PLANNER,
                 turn=turn,
-                role=role["name"],
-                model=role["model"],
-                temperature=role["temperature"],
+                role=role.name,
+                model=role.model,
+                temperature=role.temperature,
                 input_summary=spec[:500],
                 output=msg.content or "",
                 completion_tokens=usage.completion_tokens if usage else None,
@@ -72,6 +72,7 @@ def get_plans(spec: str, client: openai.Client, run_id: str, max_turns: int = 3)
 
             if not tool_calls:
                 final_text = msg.content or ""
+                plans.append(final_text)
                 break
                 # Append the assistant message with tool_calls, then each tool result.
             messages.append({
