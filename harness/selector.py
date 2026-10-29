@@ -4,7 +4,6 @@ import time
 
 import openai
 
-from harness.models import SELECTOR_MODEL
 from harness.trace import StepStatus, log_step, RunStep
 
 SYSTEM_PROMPT = """You are a selector agent. You receive a spec and two candidate
@@ -25,10 +24,9 @@ Respond with JSON only, no prose before or after:
 {"chosen": 1 or 2, "rationale": "<one sentence explaining the choice>"}
 """
 
-MODEL = SELECTOR_MODEL
 TEMPERATURE = 0.2
 
-def selector(plans: list[str], spec: str, run_id: str, client: openai.Client) -> tuple[str, str, int]:
+def selector(plans: list[str], spec: str, run_id: str, client: openai.Client, model: str) -> tuple[str, str, int]:
     logging.info("Starting selector")
 
     user_prompt = ""
@@ -44,7 +42,7 @@ def selector(plans: list[str], spec: str, run_id: str, client: openai.Client) ->
     ]
     t0 = time.time()
     kwargs = {
-        "model": MODEL,
+        "model": model,
         "temperature": TEMPERATURE,
         "messages": messages
     }
@@ -79,7 +77,7 @@ def selector(plans: list[str], spec: str, run_id: str, client: openai.Client) ->
         step=RunStep.SELECTOR,
         turn=turn,
         role="selector",
-        model=MODEL,
+        model=model,
         temperature=TEMPERATURE,
         input_summary=spec[:500],
         output=msg.content or "",

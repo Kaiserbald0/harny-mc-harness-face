@@ -1,5 +1,0 @@
-CRITIC_MODEL = "cohere/north-mini-code:free"
-PLANNER_CONSERVATIVE_MODEL = "cohere/north-mini-code:free"
-PLANNER_EXPLORATIVE_MODEL = "recursive/flint-v1.0:free"
-TOOL_TESTER_MODEL = "recursive/flint-v1.0:free"
-SELECTOR_MODEL = "dots-studio/dots-3-note-preview:free"

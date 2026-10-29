@@ -5,7 +5,7 @@ from openai import OpenAI
 import logging
 import os
 
-from harness.critic import critique
+from harness.critique import critique
 
 SPEC = """
 Build a simple API using golang. The APi is an health check for the service so it should respond to GET /health
@@ -42,8 +42,9 @@ def main():
 13. Write a test that performs a POST request to /health and expects a 405 status code.
 14. Run go test ./... and go build ./... to verify the implementation."""  # 11 steps
 
-    print("CONSERVATIVE:", critique(conservative, SPEC, run_id, client))
-    print("EXPLORATIVE:", critique(explorative, SPEC, run_id, client))
+    critique_model = os.getenv("CRITIC_MODEL")
+    print("CONSERVATIVE:", critique(conservative, SPEC, run_id, client, critique_model))
+    print("EXPLORATIVE:", critique(explorative, SPEC, run_id, client, critique_model))
 
 
 if __name__ == "__main__":

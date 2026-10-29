@@ -1,3 +1,7 @@
+import os
+
+from dotenv import load_dotenv
+
 from harness.critique import critique
 from harness.revise import revise
 from harness.role import Role
@@ -5,9 +9,10 @@ from harness.role import Role
 MAX_REVISE_CYCLES = 2
 
 def run_revision(plan: str, role: Role, spec: str, run_id: str, client) -> str:
+    load_dotenv()
     selected_plan = plan
     for cycle in range(MAX_REVISE_CYCLES + 1):
-        violations = critique(selected_plan, spec, run_id, client, turn=cycle)
+        violations = critique(selected_plan, spec, run_id, client, turn=cycle, model=os.getenv("CRITIC_MODEL"))
         blockers = [v for v in violations if v.get("severity") in ("blocker", "major")]
         if not blockers:
             break

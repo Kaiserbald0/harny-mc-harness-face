@@ -2,11 +2,9 @@ import json
 import logging
 import time
 
-from harness.models import CRITIC_MODEL
 from harness.parse import parse_json_loose
 from harness.trace import log_step, RunStep, StepStatus
 
-MODEL = CRITIC_MODEL
 TEMPERATURE = 0.0
 SYSTEM_PROMPT = """You are a plan critic. You receive a spec and a plan. Your job is
 to find violations of the rules below and report them. You do not rewrite the plan.
@@ -52,7 +50,7 @@ If there are no violations, output exactly:
 {"violations": []}
 """
 
-def critique(plan: str, spec: str, run_id: str, client, turn: int = 0) -> list[dict]:
+def critique(plan: str, spec: str, run_id: str, client, model: str, turn: int = 0) -> list[dict]:
     t0 = time.time()
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -60,7 +58,7 @@ def critique(plan: str, spec: str, run_id: str, client, turn: int = 0) -> list[d
     ]
 
     resp = client.chat.completions.create(
-        model=MODEL, temperature=TEMPERATURE, messages=messages,
+        model=model, temperature=TEMPERATURE, messages=messages,
     )
     msg = resp.choices[0].message
     usage = resp.usage
@@ -82,7 +80,7 @@ def critique(plan: str, spec: str, run_id: str, client, turn: int = 0) -> list[d
         step=RunStep.CRITIC,
         turn=turn,
         role="critic",
-        model=MODEL,
+        model=model,
         temperature=TEMPERATURE,
         input_summary=spec[:500],
         output=msg.content or "",

@@ -1,7 +1,11 @@
+import os
+
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
-from harness.models import PLANNER_CONSERVATIVE_MODEL, PLANNER_EXPLORATIVE_MODEL, TOOL_TESTER_MODEL
 from harness.tool_schemas import ALL_TOOL_SCHEMAS
+
+load_dotenv()
 
 PLANNER_BASE = """You are a planning agent. Given a coding spec, produce an
 implementation plan as a numbered list of steps.
@@ -49,21 +53,21 @@ class Role(BaseModel):
 
 PLANNER_CONSERVATIVE = Role(
     name="planner_conservative",
-    model=PLANNER_CONSERVATIVE_MODEL,
+    model=os.getenv("PLANNER_CONSERVATIVE_MODEL"),
     temperature=0.2,
     system_prompt=PLANNER_CONSERVATIVE_PROMPT,
 )
 
 PLANNER_EXPLORATIVE = Role(
     name="planner_explorative",
-    model=PLANNER_EXPLORATIVE_MODEL,
+    model=os.getenv("PLANNER_EXPLORATIVE_MODEL"),
     temperature=0.9,
     system_prompt=PLANNER_EXPLORATIVE_PROMPT
 )
 
 TOOL_TESTER = Role(
     name="tool_tester",
-    model=TOOL_TESTER_MODEL,
+    model=os.getenv("TOOL_TESTER_MODEL"),
     temperature=0.0,
     system_prompt= """You are a test agent. Use the available tools to
 explore the sandbox. Start by listing the current directory. Then read one

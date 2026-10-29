@@ -31,11 +31,24 @@ def main():
     roles_list = [PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE]
     plans = get_plans(spec=SPEC, roles=roles_list, run_id=run_id, client=client)
     print(f"\n=== {len(plans)} plans ===")
-    selected_plan, rational, selected_index = selector(plans=plans, spec=SPEC, run_id=run_id, client=client)
+    selected_plan, rational, selected_index = selector(
+        plans=plans,
+        spec=SPEC,
+        run_id=run_id,
+        client=client,
+        model=os.getenv("SELECTOR_MODEL")
+    )
+    print(f"\n=== {len(plans)} plans ===")
     print(f"\n=== selected plan: \n {selected_plan} ===")
     print(f"\n=== rational: \n{rational} ===")
     chosen_role = roles_list[selected_index]
-    revised_plan = run_revision(plan=selected_plan, role=chosen_role, spec=SPEC, run_id=run_id, client=client)
+    revised_plan = run_revision(
+        plan=selected_plan,
+        role=chosen_role,
+        spec=SPEC,
+        run_id=run_id,
+        client=client
+    )
     print(f"\n=== revised plan: \n {revised_plan} ===")
 
 if __name__ == "__main__":
