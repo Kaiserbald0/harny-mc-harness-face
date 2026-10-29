@@ -6,6 +6,7 @@ import logging
 import os
 
 from harness.get_plans import get_plans
+from harness.implement import implement
 from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE
 from harness.run_revision import run_revision
 from harness.selector import selector
@@ -50,6 +51,7 @@ def main():
         client=client
     )
     print(f"\n=== revised plan: \n {revised_plan} ===")
+
 
 if __name__ == "__main__":
     main()

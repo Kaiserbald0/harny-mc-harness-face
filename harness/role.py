@@ -75,3 +75,17 @@ file if present. When you have done both, reply with the single word DONE
 and nothing else.""",
     tools=ALL_TOOL_SCHEMAS,
 )
+
+IMPLEMENTER_SYSTEM_PROMPT = """You are a software engineer. You receive a spec and a plan. Your job is
+to write code. Follow the implementation plan.
+If review findings are provided, your job is to address them, not to reimplement
+from scratch. Keep code the findings do not mention.
+"""
+
+IMPLEMENTER = Role(
+    name="implementer",
+    model=os.getenv("IMPLEMENTATION_MODEL"),
+    temperature=0.0,
+    system_prompt=IMPLEMENTER_SYSTEM_PROMPT,
+    tools=ALL_TOOL_SCHEMAS,
+)

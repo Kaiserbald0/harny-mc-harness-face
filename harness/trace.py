@@ -20,6 +20,7 @@ class RunStep(str, Enum):
     SELECTOR = "selector"
     CRITIC = "critic"
     REVISE = "revise"
+    IMPLEMENTATION = "implementation"
 
 class TraceRow(BaseModel):
     ts: float = Field(default_factory=time.time)
