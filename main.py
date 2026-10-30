@@ -7,7 +7,7 @@ import os
 
 from harness.get_plans import get_plans
 from harness.implement import implement
-from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE
+from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE, IMPLEMENTER
 from harness.run_revision import run_revision
 from harness.selector import selector
 
@@ -52,6 +52,22 @@ def main():
     )
     print(f"\n=== revised plan: \n {revised_plan} ===")
 
+    result = implement(
+        plan=revised_plan,
+        findings=[],
+        client=client,
+        run_id=run_id,
+        role=IMPLEMENTER,
+        max_turns=10,
+    )
+
+    if not result.finished:
+        print(f"WARN: implementer did not finish after {result.turns_used} turns")
+        print(f"      files written so far: {result.files_written}")
+    else:
+        print(f"implementer finished in {result.turns_used} turns")
+        print(f"files: {result.files_written}")
+        print(f"final text: {result.final_text[:200]}")
 
 if __name__ == "__main__":
     main()
