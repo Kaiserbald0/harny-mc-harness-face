@@ -37,7 +37,8 @@ def main():
         findings=[],
         client=client,
         run_id=run_id,
-        role=IMPLEMENTER
+        role=IMPLEMENTER,
+        max_turns=10,
     )
     if not result.finished:
         print(f"WARN: implementer did not finish after {result.turns_used} turns")

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import time
@@ -18,6 +19,9 @@ class ImplementationResult:
     turns_used: int
     final_text: str
 
+def _content_hash(content: str) -> str:
+    return hashlib.sha256(content.encode()).hexdigest()
+
 def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:openai.Client, max_turns: int = 5) -> ImplementationResult:
     logging.info("Starting implementation")
     user_content = f"<plan>\n{plan}\n</plan>"
@@ -36,6 +40,10 @@ def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:o
     files_written: list[str] = []
     turns_used = 0
     final_text = ""
+    # inside implement(), before the loop:
+    write_history: dict[str, str] = {}  # path -> last content hash
+    no_progress_streak = 0
+    MAX_NO_PROGRESS = 3
 
     for turn in range(max_turns):
         turns_used = turn + 1
@@ -104,6 +112,18 @@ def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:o
         })
         for tc in tool_calls:
             if tc.function.name == "write_file":
+                args = json.loads(tc.function.arguments)
+                path = args.get("path", "")
+                content = args.get("content", "")
+                new_hash = _content_hash(content)
+
+                if write_history.get(path) == new_hash:
+                    no_progress_streak += 1
+                    logging.warning("no progress: rewrite of %s with identical content (streak %d)", path,
+                                    no_progress_streak)
+                else:
+                    no_progress_streak = 0
+                write_history[path] = new_hash
                 try:
                     args = json.loads(tc.function.arguments)
                     path = args.get("path")
@@ -118,6 +138,17 @@ def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:o
                 "content": result[:2000],
             })
         logging.info("tool call done")
+        if no_progress_streak >= MAX_NO_PROGRESS:
+            logging.warning("implementer oscillating: %d consecutive identical rewrites; stopping early",
+                            no_progress_streak)
+            log_step(
+                run_id=run_id, step=RunStep.IMPLEMENTATION, turn=turn,
+                role=role.name, model=role.model, temperature=role.temperature,
+                input_summary=plan[:500],
+                output=f"stopped early: {no_progress_streak} identical rewrites in a row",
+                status=StepStatus.RETRY,
+            )
+            break
 
     if not finished:
         logging.warning("implementer hit max_turns=%d without finishing", max_turns)
