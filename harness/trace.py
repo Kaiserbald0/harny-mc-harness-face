@@ -21,6 +21,7 @@ class RunStep(str, Enum):
     CRITIC = "critic"
     REVISE = "revise"
     IMPLEMENTATION = "implementation"
+    VERIFY = "verify"
 
 class TraceRow(BaseModel):
     ts: float = Field(default_factory=time.time)
@@ -31,17 +32,17 @@ class TraceRow(BaseModel):
     role: str
     model: str
     temperature: float
-    completion_tokens: int
-    prompt_tokens: int
-    total_tokens: int
-    upstream_inference_cost: float
-    upstream_inference_completions_cost: float
-    upstream_inference_prompt_cost: float
+    completion_tokens: int | None = None
+    prompt_tokens: int | None = None
+    total_tokens: int | None = None
+    upstream_inference_cost: float | None = None
+    upstream_inference_completions_cost: float | None = None
+    upstream_inference_prompt_cost: float | None = None
     duration_ms: float | None = None
     input_summary: str = Field(min_length=1, max_length=500)
     output: str
-    finish_reason: str
-    model_served: str
+    finish_reason: str | None = None
+    model_served: str | None = None
     tool_calls: list[dict[str, Any]] | None = None
     chosen_index: int | None = None
     chosen_role: str | None = None
