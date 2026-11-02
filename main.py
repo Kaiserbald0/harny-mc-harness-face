@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -10,6 +11,7 @@ from harness.implement import implement
 from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE, IMPLEMENTER
 from harness.run_revision import run_revision
 from harness.selector import selector
+from harness.verify import verify
 
 SPEC = """
 Build a simple API using golang. The APi is an health check for the service so it should respond to GET /health
@@ -68,6 +70,9 @@ def main():
         print(f"implementer finished in {result.turns_used} turns")
         print(f"files: {result.files_written}")
         print(f"final text: {result.final_text[:200]}")
+
+    verify_result = verify(Path("sandbox"), run_id="test-verify-1", language="go")
+
 
 if __name__ == "__main__":
     main()

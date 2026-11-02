@@ -22,6 +22,7 @@ class RunStep(str, Enum):
     REVISE = "revise"
     IMPLEMENTATION = "implementation"
     VERIFY = "verify"
+    REVIEW = "review"
 
 class TraceRow(BaseModel):
     ts: float = Field(default_factory=time.time)
@@ -47,6 +48,7 @@ class TraceRow(BaseModel):
     chosen_index: int | None = None
     chosen_role: str | None = None
     violations: list[dict] | None = None
+    findings: list[dict] | None = None
 
 def log_step(**fields):
     row = TraceRow(**fields)
