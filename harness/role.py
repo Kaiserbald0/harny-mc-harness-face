@@ -100,6 +100,15 @@ IMPLEMENTER = Role(
     tools=ALL_TOOL_SCHEMAS,
 )
 
+
+IMPLEMENTER_FIX = Role(
+    name="implementer",
+    model=os.getenv("IMPLEMENTATION_FIX_MODEL"),
+    temperature=0.0,
+    system_prompt=IMPLEMENTER_SYSTEM_PROMPT,
+    tools=ALL_TOOL_SCHEMAS,
+)
+
 REVIEWER_SYSTEM_PROMPT = """You are a code reviewer. You receive a spec, a plan, the files the
 implementer produced, and the output of deterministic checks (tests, linter, formatter).
 Your job is to find defects. You do not rewrite code. You do not suggest fixes.
