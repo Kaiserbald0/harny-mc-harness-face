@@ -1,0 +1,7 @@
+{
+  "id": "http-test-real-addr",
+  "trigger": "spec or plan involves HTTP handler tests",
+  "content": "HTTP handler tests must use the actual server address (e.g., `httptest.NewServer` in Go, `TestClient` in FastAPI, `supertest` in Node). A test that connects to a hardcoded localhost:PORT while the server binds to an ephemeral port (:0) will fail or flake.",
+  "scope": "global",
+  "status": "active"
+}

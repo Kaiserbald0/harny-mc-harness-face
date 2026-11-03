@@ -1,0 +1,7 @@
+{
+  "id": "go-mod-init",
+  "trigger": "spec involves Go or golang project",
+  "content": "For any new Go project, the plan must include a step to run `go mod init <module>`. A Go project without go.mod cannot be built or tested. If the plan does not mention it, add it before implementation.",
+  "scope": "global",
+  "status": "active"
+}

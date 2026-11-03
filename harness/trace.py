@@ -23,6 +23,7 @@ class RunStep(str, Enum):
     IMPLEMENTATION = "implementation"
     VERIFY = "verify"
     REVIEW = "review"
+    RETRIEVAL = "retrieval"
 
 class TraceRow(BaseModel):
     ts: float = Field(default_factory=time.time)

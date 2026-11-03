@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 @dataclass
 class ImplementationResult:
     finished: bool
+    stopped_reason: str
     files_written: list[str]
     turns_used: int
     final_text: str
@@ -40,10 +41,11 @@ def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:o
     files_written: list[str] = []
     turns_used = 0
     final_text = ""
-    # inside implement(), before the loop:
+
     write_history: dict[str, str] = {}  # path -> last content hash
     no_progress_streak = 0
     MAX_NO_PROGRESS = 3
+    stopped_reason = "max_turns"
 
     for turn in range(max_turns):
         turns_used = turn + 1
@@ -95,9 +97,9 @@ def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:o
         )
 
         if not tool_calls:
-            logging.info("implementation done")
             final_text = msg.content or ""
             finished = True
+            stopped_reason = "finished"
             break
 
         # Append the assistant message with tool_calls, then each tool result.
@@ -141,6 +143,7 @@ def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:o
         if no_progress_streak >= MAX_NO_PROGRESS:
             logging.warning("implementer oscillating: %d consecutive identical rewrites; stopping early",
                             no_progress_streak)
+            stopped_reason = "no_progress"
             log_step(
                 run_id=run_id, step=RunStep.IMPLEMENTATION, turn=turn,
                 role=role.name, model=role.model, temperature=role.temperature,
@@ -150,7 +153,7 @@ def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:o
             )
             break
 
-    if not finished:
+    if stopped_reason == "max_turns":
         logging.warning("implementer hit max_turns=%d without finishing", max_turns)
         log_step(
             run_id=run_id,

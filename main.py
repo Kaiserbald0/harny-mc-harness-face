@@ -13,6 +13,8 @@ from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE, IMPLEMENTER,
 from harness.run_revision import run_revision
 from harness.selector import selector
 from harness.verify import verify
+from harness.memory import load_skills, format_for_prompt
+from harness.trace import log_step, RunStep, StepStatus
 
 SPEC = """
 Build a simple API using golang. The APi is an health check for the service so it should respond to GET /health
@@ -34,12 +36,28 @@ def main():
     )
 
     run_id = str(uuid.uuid4())
+
+    skills = load_skills(scope="global")
+    skills_block = format_for_prompt(skills)
+    if skills:
+        spec_with_skills = f"{skills_block}\n\n{SPEC}"
+        log_step(
+            run_id=run_id, step=RunStep.RETRIEVAL, turn=0, role="librarian",
+            model="", temperature=0.0,
+            input_summary=SPEC[:500],
+            output=f"injected {len(skills)} skills: {[s.id for s in skills]}",
+            status=StepStatus.OK,
+        )
+    else:
+        spec_with_skills = SPEC
+
+
     roles_list = [PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE]
-    plans = get_plans(spec=SPEC, roles=roles_list, run_id=run_id, client=client)
+    plans = get_plans(spec=spec_with_skills, roles=roles_list, run_id=run_id, client=client)
     print(f"\n=== {len(plans)} plans ===")
     selected_plan, rational, selected_index = selector(
         plans=plans,
-        spec=SPEC,
+        spec=spec_with_skills,
         run_id=run_id,
         client=client,
         model=os.getenv("SELECTOR_MODEL")
@@ -51,7 +69,7 @@ def main():
     revised_plan = run_revision(
         plan=selected_plan,
         role=chosen_role,
-        spec=SPEC,
+        spec=spec_with_skills,
         run_id=run_id,
         client=client
     )
@@ -75,9 +93,9 @@ def main():
         print(f"final text: {result.final_text[:200]}")
 
     for cycle in range(MAX_FIX_CYCLES):
-        verify_result = verify(Path("sandbox"), run_id="test-verify-1", language="go")
+        verify_result = verify(Path("sandbox"), run_id=run_id, language="go")
         findings = review(
-            spec=SPEC, plan=revised_plan, path=Path("sandbox"),
+            spec=spec_with_skills, plan=revised_plan, path=Path("sandbox"),
             verify_result=verify_result, role=REVIEWER,
             run_id=run_id, files_written=result.files_written, client=client,
         )
