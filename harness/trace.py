@@ -51,6 +51,7 @@ class TraceRow(BaseModel):
     chosen_role: str | None = None
     violations: list[dict] | None = None
     findings: list[dict] | None = None
+    chosen_plan: str | None = None
 
 def log_step(**fields):
     row = TraceRow(**fields)

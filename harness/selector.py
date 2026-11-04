@@ -4,6 +4,7 @@ import time
 
 import openai
 
+from harness.parse import parse_json_loose
 from harness.trace import StepStatus, log_step, RunStep
 
 SYSTEM_PROMPT = """You are a selector agent. You receive a spec and two candidate
@@ -62,15 +63,26 @@ def selector(plans: list[str], spec: str, run_id: str, client: openai.Client, mo
     selected_plan_index: int = 0
     selected_plan: str = plans[0]
     rationale: str = msg.content
+    parse_ok = False
+
     try:
-        decision = json.loads(msg.content)
-        idx = int(decision["chosen"]) - 1
+        decision = parse_json_loose(msg.content or "")
+        idx = int(decision.get("chosen")) - 1
         if 0 <= idx < len(plans):
             selected_plan = plans[idx]
             rationale = decision.get("rationale", "")
-            selected_plan_index=idx
-    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
-        pass
+            selected_plan_index = idx
+            parse_ok = True
+        else:
+            logging.warning(
+                "selector returned out-of-range chosen=%r for %d plans",
+                decision.get("chosen"), len(plans),
+            )
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
+        logging.warning(
+            "selector parse failed, falling back to plans[0]: %s — raw[:300]=%r",
+            e, (msg.content or "")[:300],
+        )
 
     log_step(
         run_id=run_id,
@@ -90,7 +102,7 @@ def selector(plans: list[str], spec: str, run_id: str, client: openai.Client, mo
         duration_ms=duration_ms,
         finish_reason=resp.choices[0].finish_reason,
         model_served=resp.model,
-        status=status,
+        status=status if parse_ok else StepStatus.RETRY,
         tool_calls=[],
         chosen_plan=selected_plan,
         chosen_index=selected_plan_index,
