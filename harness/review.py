@@ -10,6 +10,7 @@ from harness.role import Role
 from harness.trace import log_step, StepStatus, RunStep
 from harness.verify import VerifyResult
 
+MAX_DIFF_CHARS = 30_000
 
 def review(
         spec: str,
@@ -19,7 +20,8 @@ def review(
         role: Role,
         run_id: str,
         files_written: list[str],
-        client: openai.Client
+        client: openai.Client,
+        diff: str,
 ) -> list[dict]:
     t0 = time.time()
     sandbox = Path(path).resolve()
@@ -31,9 +33,10 @@ def review(
         manifest=manifest,
         verify_result=verify_result,
         truncated=truncated,
+        diff=diff
     )
 
-    print(f"\n=== content: \n {content} ===")
+    logging.debug("review content: %s", content)
 
     messages = [
         {"role": "system", "content": role.system_prompt},
@@ -52,10 +55,9 @@ def review(
     status = StepStatus.OK if usage else StepStatus.ERROR
     duration_ms = int((time.time() - t0) * 1000)
 
-    print(f"review: finish_reason={resp.choices[0].finish_reason} "
+    logging.info(f"review: finish_reason={resp.choices[0].finish_reason} "
           f"content_len={len(msg.content or '')} "
           f"reasoning_len={len(msg.reasoning or '') if hasattr(msg, 'reasoning') else 0}"
-          f"content={msg.content or ''} "
     )
 
     try:
@@ -68,6 +70,7 @@ def review(
         logging.warning("review parse failed: %s", e)
         findings = [{"rule": "PARSE", "severity": "blocker", "reason": str(e)}]
 
+    diff_truncated = len(diff) > MAX_DIFF_CHARS
     log_step(
         run_id=run_id,
         step=RunStep.REVIEW,
@@ -76,7 +79,11 @@ def review(
         model=role.model,
         temperature=role.temperature,
         input_summary=spec[:500],
-        output=msg.content or "",
+        output=(
+            f"diff_bytes={len(diff)} diff_truncated={diff_truncated} "
+            f"files={len(files)} files_truncated={len(truncated)} "
+            f"findings={len(findings)}"
+        ),
         findings=findings,
         completion_tokens=usage.completion_tokens if usage else None,
         prompt_tokens=usage.prompt_tokens if usage else None,
@@ -117,7 +124,10 @@ def _read_files(sandbox: Path, candidates: list[str]) -> tuple[dict[str, str], l
     return files, truncated
 
 
-def collect_review_input(sandbox: Path, written: list[str]) -> tuple[dict[str, str], list[str], list[str]]:
+def collect_review_input(
+        sandbox: Path,
+        written: list[str]
+) -> tuple[dict[str, str], list[str], list[str]]:
     sandbox = Path(sandbox).resolve()
 
     manifest = sorted(
@@ -142,7 +152,15 @@ def format_verify_for_review(v: VerifyResult) -> str:
         return f"ran: no\nreason: {v.summary}"
     return f"ran: yes\nsummary: {v.summary}"
 
-def build_review_message(spec: str, plan: str, files: dict[str, str], manifest: list[str], verify_result, truncated: list[str] | None = None) -> str:
+def build_review_message(
+        spec: str,
+        plan: str,
+        files: dict[str, str],
+        manifest: list[str],
+        verify_result,
+        diff: str,
+        truncated: list[str] | None = None,
+) -> str:
     files_block = "\n\n".join(
         f'<file path="{path}">\n{content}\n</file>'
         for path, content in files.items()
@@ -151,6 +169,11 @@ def build_review_message(spec: str, plan: str, files: dict[str, str], manifest: 
     verify_block = format_verify_for_review(verify_result)
     truncated_block = "\n".join(truncated or []) or "none"
 
+    diff_truncated = len(diff) > MAX_DIFF_CHARS
+    diff_block = diff[:MAX_DIFF_CHARS]
+    if diff_truncated:
+        diff_block += f"\n... (truncated: {len(diff) - MAX_DIFF_CHARS} more chars)"
+
     return f"""<spec>
 {spec.strip()}
 </spec>
@@ -158,6 +181,10 @@ def build_review_message(spec: str, plan: str, files: dict[str, str], manifest: 
 <plan>
 {plan.strip()}
 </plan>
+
+<diff>
+{diff_block.strip()}
+</diff>
 
 <changed_files>
 {files_block}

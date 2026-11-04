@@ -6,3 +6,4 @@ trace.jsonl
 memory/staging/.vscode/
 .idea
 sandbox/
+artifacts/

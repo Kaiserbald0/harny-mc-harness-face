@@ -6,6 +6,7 @@ from openai import OpenAI
 import logging
 import os
 
+from harness import git
 from harness.get_plans import get_plans
 from harness.implement import implement
 from harness.review import review
@@ -32,11 +33,15 @@ def main():
     )
 
     client = OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=os.getenv("OPENROUTER_API_KEY"),
+        base_url=os.getenv("LLM_API_ENDPOINT"),
+        api_key=os.getenv("LLM_API_KEY"),
     )
 
     run_id = str(uuid.uuid4())
+
+    sandbox = sandbox_root()
+    git.ensure_repo(sandbox)
+    branch = git.create_branch(sandbox, f"harny/{run_id[:8]}")
 
     skills = load_skills(scope="global")
     skills_block = format_for_prompt(skills)
@@ -84,7 +89,7 @@ def main():
         role=IMPLEMENTER,
         max_turns=10,
     )
-
+    diff, changed = "", []
     if not result.finished:
         print(f"WARN: implementer did not finish after {result.turns_used} turns")
         print(f"      files written so far: {result.files_written}")
@@ -92,14 +97,31 @@ def main():
         print(f"implementer finished in {result.turns_used} turns")
         print(f"files: {result.files_written}")
         print(f"final text: {result.final_text[:200]}")
+        if result.files_written:
+            commit = git.commit_all(
+                sandbox,
+                message=f"ai: {SPEC.strip().splitlines()[0][:72]} (run {run_id[:8]})",
+            )
+            diff = git.diff_against(sandbox, base="main")
+            changed = git.changed_files(sandbox, base="main")
+            artifact_dir = Path("artifacts") / run_id
+            artifact_dir.mkdir(parents=True, exist_ok=True)
+            (artifact_dir / "diff.patch").write_text(diff)
 
-    sandbox = sandbox_root()
+            log_step(
+                run_id=run_id, step=RunStep.GIT, turn=0, role="harness",
+                model="", temperature=0.0, input_summary=branch,
+                output=f"commit={commit.sha[:8]} files={len(changed)} diff_bytes={len(diff)} artifact={artifact_dir}/diff.patch",
+                status=StepStatus.OK if commit.committed else StepStatus.EMPTY,
+            )
+
     for cycle in range(MAX_FIX_CYCLES):
         verify_result = verify(sandbox, run_id=run_id, language="go")
         findings = review(
             spec=spec_with_skills, plan=revised_plan, path=sandbox,
             verify_result=verify_result, role=REVIEWER,
             run_id=run_id, files_written=result.files_written, client=client,
+            diff=diff,
         )
         blockers = [f for f in findings if f["severity"] in ("blocker", "major")]
         if not blockers and verify_result.passed:
@@ -122,6 +144,19 @@ def main():
             print(f"implementer fix cycle {cycle} finished in {result.turns_used} turns")
             print(f"files: {result.files_written}")
             print(f"final text: {result.final_text[:200]}")
+            if result.files_written:
+                commit = git.commit_all(
+                    sandbox,
+                    message=f"ai: fix cycle {cycle} — {len(blockers)} findings",
+                )
+                diff = git.diff_against(sandbox, base="main")
+                changed = git.changed_files(sandbox, base="main")
+                log_step(
+                    run_id=run_id, step=RunStep.GIT, turn=0, role="harness",
+                    model="", temperature=0.0, input_summary=branch,
+                    output=f"commit={commit.sha[:8]} files={len(changed)} diff_bytes={len(diff)}",
+                    status=StepStatus.OK if commit.committed else StepStatus.EMPTY,
+                )
 
 if __name__ == "__main__":
     main()
