@@ -1,4 +1,5 @@
 import os
+import re
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -158,6 +159,5 @@ REVIEWER = Role(
     name="reviewer",
     model=os.getenv("REVIEWER_MODEL"),
     temperature=0.0,
-    system_prompt=IMPLEMENTER_SYSTEM_PROMPT,
-    tools=ALL_TOOL_SCHEMAS,
+    system_prompt=REVIEWER_SYSTEM_PROMPT,
 )

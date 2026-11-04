@@ -177,6 +177,7 @@ def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:o
 
     return ImplementationResult(
         finished=finished,
+        stopped_reason=stopped_reason,
         files_written=files_written,
         turns_used=turns_used,
         final_text=final_text,

@@ -22,7 +22,6 @@ def get_plans(spec: str, roles: list[Role], client: openai.Client, run_id: str, 
         ]
         tools = role.tools
 
-        final_text = ""
         for turn in range(max_turns):
             t0 = time.time()
             kwargs = {
@@ -71,10 +70,9 @@ def get_plans(spec: str, roles: list[Role], client: openai.Client, run_id: str, 
             )
 
             if not tool_calls:
-                final_text = msg.content or ""
-                plans.append(final_text)
+                plans.append(msg.content or "")
                 break
-                # Append the assistant message with tool_calls, then each tool result.
+            # Append the assistant message with tool_calls, then each tool result.
             messages.append({
                 "role": "assistant",
                 "content": msg.content,
@@ -91,6 +89,7 @@ def get_plans(spec: str, roles: list[Role], client: openai.Client, run_id: str, 
                     "tool_call_id": tc.id,
                     "content": result[:2000],  # cap what goes back into context
                 })
-            plans.append(final_text)
+        else:
+            logging.warning("planner %s produced no final plan after %d turns", role.name, max_turns)
 
     return plans

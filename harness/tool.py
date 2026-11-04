@@ -1,13 +1,15 @@
 import os
 from pathlib import Path
 
-# Restricting everything to a sandbox root so HARNY can't nuke the whole disk.
-SANDBOX_ROOT = Path(os.environ.get("HARNY_SANDBOX", "./sandbox")).resolve()
+
+def sandbox_root() -> Path:
+    return Path(os.environ.get("HARNY_SANDBOX", "./sandbox")).resolve()
 
 
 def _safe_path(path: str) -> Path:
-    p = (SANDBOX_ROOT / path).resolve()
-    if not str(p).startswith(str(SANDBOX_ROOT)):
+    root = sandbox_root()
+    p = (root / path).resolve()
+    if p != root and root not in p.parents:
         raise ValueError(f"path escapes sandbox: {path}")
     return p
 

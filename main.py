@@ -13,6 +13,7 @@ from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE, IMPLEMENTER,
 from harness.run_revision import run_revision
 from harness.selector import selector
 from harness.verify import verify
+from harness.tool import sandbox_root
 from harness.memory import load_skills, format_for_prompt
 from harness.trace import log_step, RunStep, StepStatus
 
@@ -92,10 +93,11 @@ def main():
         print(f"files: {result.files_written}")
         print(f"final text: {result.final_text[:200]}")
 
+    sandbox = sandbox_root()
     for cycle in range(MAX_FIX_CYCLES):
-        verify_result = verify(Path("sandbox"), run_id=run_id, language="go")
+        verify_result = verify(sandbox, run_id=run_id, language="go")
         findings = review(
-            spec=spec_with_skills, plan=revised_plan, path=Path("sandbox"),
+            spec=spec_with_skills, plan=revised_plan, path=sandbox,
             verify_result=verify_result, role=REVIEWER,
             run_id=run_id, files_written=result.files_written, client=client,
         )

@@ -30,6 +30,7 @@ def review(
         files=files,
         manifest=manifest,
         verify_result=verify_result,
+        truncated=truncated,
     )
 
     print(f"\n=== content: \n {content} ===")
@@ -93,15 +94,16 @@ def review(
 MAX_FILE_CHARS = 8000
 MAX_TOTAL_CHARS = 60000
 
-def collect_review_input(sandbox: Path, written: list[str]) -> tuple[dict[str, str], list[str], list[str]]:
-    sandbox = Path(sandbox).resolve()
+def _read_files(sandbox: Path, candidates: list[str]) -> tuple[dict[str, str], list[str]]:
     files: dict[str, str] = {}
     truncated: list[str] = []
     total = 0
-
-    for path in dict.fromkeys(written):          # dedupe, preserve order
-        p = sandbox / path
+    for path in candidates:
+        p = Path(path)
+        if not p.is_absolute():
+            p = sandbox / p
         if not p.is_file():
+            logging.warning("review input: file %s not found under %s", path, sandbox)
             continue
         content = p.read_text(errors="replace")
         if len(content) > MAX_FILE_CHARS:
@@ -112,12 +114,27 @@ def collect_review_input(sandbox: Path, written: list[str]) -> tuple[dict[str, s
             continue
         files[path] = content
         total += len(content)
+    return files, truncated
+
+
+def collect_review_input(sandbox: Path, written: list[str]) -> tuple[dict[str, str], list[str], list[str]]:
+    sandbox = Path(sandbox).resolve()
 
     manifest = sorted(
         str(p.relative_to(sandbox))
         for p in sandbox.rglob("*")
         if p.is_file() and not any(part.startswith(".") for part in p.relative_to(sandbox).parts)
     )
+
+    files, truncated = _read_files(sandbox, list(dict.fromkeys(written)))  # dedupe, preserve order
+    if not files and manifest:
+        # The implementer recorded no resolvable writes (e.g. sandbox reused
+        # across runs, so it no-op'd) — review everything instead of nothing.
+        logging.warning(
+            "review input: none of files_written resolved; falling back to all %d files in the sandbox manifest",
+            len(manifest),
+        )
+        files, truncated = _read_files(sandbox, manifest)
     return files, manifest, truncated
 
 def format_verify_for_review(v: VerifyResult) -> str:
@@ -125,13 +142,14 @@ def format_verify_for_review(v: VerifyResult) -> str:
         return f"ran: no\nreason: {v.summary}"
     return f"ran: yes\nsummary: {v.summary}"
 
-def build_review_message(spec: str, plan: str, files: dict[str, str], manifest: list[str], verify_result) -> str:
+def build_review_message(spec: str, plan: str, files: dict[str, str], manifest: list[str], verify_result, truncated: list[str] | None = None) -> str:
     files_block = "\n\n".join(
         f'<file path="{path}">\n{content}\n</file>'
         for path, content in files.items()
     )
     manifest_block = "\n".join(manifest)
     verify_block = format_verify_for_review(verify_result)
+    truncated_block = "\n".join(truncated or []) or "none"
 
     return f"""<spec>
 {spec.strip()}
@@ -144,6 +162,10 @@ def build_review_message(spec: str, plan: str, files: dict[str, str], manifest: 
 <changed_files>
 {files_block}
 </changed_files>
+
+<truncated>
+{truncated_block}
+</truncated>
 
 <manifest>
 {manifest_block}
