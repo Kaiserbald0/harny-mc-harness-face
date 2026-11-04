@@ -64,8 +64,9 @@ def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:o
         msg = resp.choices[0].message
         usage = resp.usage
         cost = getattr(usage, "cost_details", None) or {}
+        content = msg.content or ""
         tool_calls = msg.tool_calls or []
-        if not msg.content and not tool_calls:
+        if not content and not tool_calls:
             status = StepStatus.EMPTY
         else:
             status = StepStatus.OK if usage else StepStatus.ERROR
@@ -78,7 +79,7 @@ def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:o
             model=role.model,
             temperature=role.temperature,
             input_summary=plan[:500],
-            output=msg.content or "",
+            output=content,
             completion_tokens=usage.completion_tokens if usage else None,
             prompt_tokens=usage.prompt_tokens if usage else None,
             total_tokens=usage.total_tokens if usage else None,
@@ -97,7 +98,7 @@ def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:o
         )
 
         if not tool_calls:
-            final_text = msg.content or ""
+            final_text = content
             finished = True
             stopped_reason = "finished"
             break

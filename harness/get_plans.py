@@ -38,8 +38,9 @@ def get_plans(spec: str, roles: list[Role], client: openai.Client, run_id: str, 
             msg = resp.choices[0].message
             usage = resp.usage
             cost = getattr(usage, "cost_details", None) or {}
+            content = msg.content or ""
             status = StepStatus.OK if usage else StepStatus.ERROR
-            if msg.content == "":
+            if not content:
                 status = StepStatus.EMPTY
             tool_calls = msg.tool_calls or []
 
@@ -51,7 +52,7 @@ def get_plans(spec: str, roles: list[Role], client: openai.Client, run_id: str, 
                 model=role.model,
                 temperature=role.temperature,
                 input_summary=spec[:500],
-                output=msg.content or "",
+                output=content,
                 completion_tokens=usage.completion_tokens if usage else None,
                 prompt_tokens=usage.prompt_tokens if usage else None,
                 total_tokens=usage.total_tokens if usage else None,
@@ -70,7 +71,7 @@ def get_plans(spec: str, roles: list[Role], client: openai.Client, run_id: str, 
             )
 
             if not tool_calls:
-                plans.append(msg.content or "")
+                plans.append(content)
                 break
             # Append the assistant message with tool_calls, then each tool result.
             messages.append({

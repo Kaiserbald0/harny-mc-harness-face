@@ -1,11 +1,10 @@
-import json
 import logging
-import time
 
 import openai
 
-from harness.parse import parse_json_loose
-from harness.trace import StepStatus, log_step, RunStep
+from harness.llm_call import call_json
+from harness.role import Role
+from harness.trace import RunStep
 
 SYSTEM_PROMPT = """You are a selector agent. You receive a spec and two candidate
 plans, labelled PLAN 1 and PLAN 2. Choose the plan that is better for implementation.
@@ -41,71 +40,39 @@ def selector(plans: list[str], spec: str, run_id: str, client: openai.Client, mo
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt},
     ]
-    t0 = time.time()
-    kwargs = {
-        "model": model,
-        "temperature": TEMPERATURE,
-        "messages": messages
-    }
+    role = Role(name="selector", model=model, temperature=TEMPERATURE, system_prompt=SYSTEM_PROMPT)
 
-    resp = client.chat.completions.create(**kwargs)
-    duration_ms = int((time.time() - t0) * 1000)
-
-    msg = resp.choices[0].message
-    usage = resp.usage
-    cost = getattr(usage, "cost_details", None) or {}
-    status = StepStatus.OK if usage else StepStatus.ERROR
-    if msg.content == "":
-        status = StepStatus.EMPTY
-
-    turn = 0
-
-    selected_plan_index: int = 0
-    selected_plan: str = plans[0]
-    rationale: str = msg.content
-    parse_ok = False
-
-    try:
-        decision = parse_json_loose(msg.content or "")
-        idx = int(decision.get("chosen")) - 1
-        if 0 <= idx < len(plans):
-            selected_plan = plans[idx]
-            rationale = decision.get("rationale", "")
-            selected_plan_index = idx
-            parse_ok = True
-        else:
-            logging.warning(
-                "selector returned out-of-range chosen=%r for %d plans",
-                decision.get("chosen"), len(plans),
-            )
-    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
-        logging.warning(
-            "selector parse failed, falling back to plans[0]: %s — raw[:300]=%r",
-            e, (msg.content or "")[:300],
-        )
-
-    log_step(
+    # parse_key="chosen": the decision is a scalar (1 or 2), so call_json wraps
+    # it as a single-item list in `items`; the caller reads `decision` and
+    # ignores `items`.
+    decision, _, ok = call_json(
+        role=role,
+        messages=messages,
+        client=client,
         run_id=run_id,
         step=RunStep.SELECTOR,
-        turn=turn,
-        role="selector",
-        model=model,
-        temperature=TEMPERATURE,
         input_summary=spec[:500],
-        output=msg.content or "",
-        completion_tokens=usage.completion_tokens if usage else None,
-        prompt_tokens=usage.prompt_tokens if usage else None,
-        total_tokens=usage.total_tokens if usage else None,
-        upstream_inference_cost=cost.get("upstream_inference_cost"),
-        upstream_inference_completions_cost=cost.get("upstream_inference_completions_cost"),
-        upstream_inference_prompt_cost=cost.get("upstream_inference_prompt_cost"),
-        duration_ms=duration_ms,
-        finish_reason=resp.choices[0].finish_reason,
-        model_served=resp.model,
-        status=status if parse_ok else StepStatus.RETRY,
-        tool_calls=[],
-        chosen_plan=selected_plan,
-        chosen_index=selected_plan_index,
+        parse_key="chosen",
     )
 
-    return selected_plan, rationale, selected_plan_index
+    selected_plan_index = 0
+    selected_plan = plans[0]
+    rationale = ""
+    if not ok:
+        logging.warning("selector call failed (parse error or truncation); falling back to plans[0]")
+        return selected_plan, rationale, selected_plan_index
+    try:
+        idx = int(decision.get("chosen")) - 1
+    except (TypeError, ValueError) as e:
+        logging.warning(
+            "selector returned unusable chosen=%r; falling back to plans[0]: %s",
+            decision.get("chosen"), e,
+        )
+        return selected_plan, rationale, selected_plan_index
+    if not 0 <= idx < len(plans):
+        logging.warning(
+            "selector returned out-of-range chosen=%r for %d plans; falling back to plans[0]",
+            decision.get("chosen"), len(plans),
+        )
+        return selected_plan, rationale, selected_plan_index
+    return plans[idx], str(decision.get("rationale", "")), idx

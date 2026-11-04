@@ -1,13 +1,12 @@
-import json
 import logging
 from pathlib import Path
 
 import openai
-import time
 
-from harness.parse import parse_json_loose, normalize_findings
+from harness.llm_call import call_json
+from harness.parse import normalize_findings
 from harness.role import Role
-from harness.trace import log_step, StepStatus, RunStep
+from harness.trace import RunStep
 from harness.verify import VerifyResult
 
 MAX_DIFF_CHARS = 30_000
@@ -23,7 +22,6 @@ def review(
         client: openai.Client,
         diff: str,
 ) -> list[dict]:
-    t0 = time.time()
     sandbox = Path(path).resolve()
     files, manifest, truncated = collect_review_input(sandbox, files_written)
     content = build_review_message(
@@ -43,59 +41,19 @@ def review(
         {"role": "user", "content": content},
     ]
 
-    resp = client.chat.completions.create(
-        model=role.model,
-        temperature=role.temperature,
+    _, findings, _ = call_json(
+        role=role,
         messages=messages,
-        response_format={"type": "json_object"},
-    )
-    msg = resp.choices[0].message
-    usage = resp.usage
-    cost = getattr(usage, "cost_details", None) or {}
-    status = StepStatus.OK if usage else StepStatus.ERROR
-    duration_ms = int((time.time() - t0) * 1000)
-
-    logging.info(f"review: finish_reason={resp.choices[0].finish_reason} "
-          f"content_len={len(msg.content or '')} "
-          f"reasoning_len={len(msg.reasoning or '') if hasattr(msg, 'reasoning') else 0}"
-    )
-
-    try:
-        decision = parse_json_loose(msg.content or "")
-        raw = decision.get("findings", [])
-        if not isinstance(raw, list):
-            raise ValueError(f"findings is {type(raw).__name__}")
-        findings = normalize_findings(raw)
-    except (json.JSONDecodeError, ValueError, AttributeError) as e:
-        logging.warning("review parse failed: %s", e)
-        findings = [{"rule": "PARSE", "severity": "blocker", "reason": str(e)}]
-
-    diff_truncated = len(diff) > MAX_DIFF_CHARS
-    log_step(
+        client=client,
         run_id=run_id,
         step=RunStep.REVIEW,
-        turn=0,
-        role=role.name,
-        model=role.model,
-        temperature=role.temperature,
         input_summary=spec[:500],
-        output=(
-            f"diff_bytes={len(diff)} diff_truncated={diff_truncated} "
-            f"files={len(files)} files_truncated={len(truncated)} "
-            f"findings={len(findings)}"
-        ),
-        findings=findings,
-        completion_tokens=usage.completion_tokens if usage else None,
-        prompt_tokens=usage.prompt_tokens if usage else None,
-        total_tokens=usage.total_tokens if usage else None,
-        upstream_inference_cost=cost.get("upstream_inference_cost"),
-        upstream_inference_completions_cost=cost.get("upstream_inference_completions_cost"),
-        upstream_inference_prompt_cost=cost.get("upstream_inference_prompt_cost"),
-        duration_ms=duration_ms,
-        finish_reason=resp.choices[0].finish_reason,
-        model_served=resp.model,
-        status=status,
+        parse_key="findings",
+        normalizer=normalize_findings,
     )
+    # call_json logs the standard row (output=raw content, findings attached).
+    # Diff metadata (diff_bytes, truncation, file counts) is recorded in the
+    # GIT trace row written by main.py, so no override row is needed here.
     return findings
 
 MAX_FILE_CHARS = 8000

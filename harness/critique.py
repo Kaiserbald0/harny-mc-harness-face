@@ -1,9 +1,9 @@
-import json
 import logging
-import time
 
-from harness.parse import parse_json_loose
-from harness.trace import log_step, RunStep, StepStatus
+from harness.llm_call import call_json
+from harness.parse import normalize_findings
+from harness.role import Role
+from harness.trace import RunStep
 
 TEMPERATURE = 0.0
 SYSTEM_PROMPT = """You are a plan critic. You receive a spec and a plan. Your job is
@@ -51,51 +51,22 @@ If there are no violations, output exactly:
 """
 
 def critique(plan: str, spec: str, run_id: str, client, model: str, turn: int = 0) -> list[dict]:
-    t0 = time.time()
+    logging.info("Starting critique")
+    role = Role(name="critic", model=model, temperature=TEMPERATURE, system_prompt=SYSTEM_PROMPT)
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": f"<spec>\n{spec}\n</spec>\n\n<plan>\n{plan}\n</plan>"},
     ]
 
-    resp = client.chat.completions.create(
-        model=model, temperature=TEMPERATURE, messages=messages,
-    )
-    msg = resp.choices[0].message
-    usage = resp.usage
-    cost = getattr(usage, "cost_details", None) or {}
-    status = StepStatus.OK if usage else StepStatus.ERROR
-    duration_ms = int((time.time() - t0) * 1000)
-
-    try:
-        decision = parse_json_loose(msg.content)
-        violations = decision.get("violations", [])
-        if not isinstance(violations, list):
-            raise ValueError(f"violations is {type(violations).__name__}")
-    except (json.JSONDecodeError, AttributeError, ValueError) as e:
-        logging.warning("critic parse failed: %s", e)
-        violations = [{"rule": "PARSE", "severity": "blocker", "reason": str(e)}]
-
-    log_step(
+    _, violations, _ = call_json(
+        role=role,
+        messages=messages,
+        client=client,
         run_id=run_id,
         step=RunStep.CRITIC,
         turn=turn,
-        role="critic",
-        model=model,
-        temperature=TEMPERATURE,
         input_summary=spec[:500],
-        output=msg.content or "",
-        completion_tokens=usage.completion_tokens if usage else None,
-        prompt_tokens=usage.prompt_tokens if usage else None,
-        total_tokens=usage.total_tokens if usage else None,
-        upstream_inference_cost=cost.get("upstream_inference_cost"),
-        upstream_inference_completions_cost=cost.get("upstream_inference_completions_cost"),
-        upstream_inference_prompt_cost=cost.get("upstream_inference_prompt_cost"),
-        duration_ms=duration_ms,
-        finish_reason=resp.choices[0].finish_reason,
-        model_served=resp.model,
-        status=status,
-        tool_calls=[],
-        violations=violations,
+        parse_key="violations",
+        normalizer=normalize_findings,
     )
-
     return violations
