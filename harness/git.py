@@ -1,7 +1,15 @@
 import logging
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+GIT_USER_EMAIL = os.getenv("GIT_USER_EMAIL", "harny@local")
+GIT_USER_NAME = os.getenv("GIT_USER_NAME", "Harny")
 
 def _run(cmd: list[str], cwd: Path, timeout: int = 30) -> tuple[int, str, str]:
     try:
@@ -30,8 +38,11 @@ def ensure_repo(sandbox: Path, base: str = "main") -> bool:
         _run(["git", "init", "-b", base], sandbox)
         changed = True
 
-    _run(["git", "config", "user.email", "harny@local"], sandbox)
-    _run(["git", "config", "user.name", "Harny"], sandbox)
+    rc, _, _ = _run(["git", "config", "--get", "user.email"], sandbox)
+    if rc != 0:
+        _run(["git", "config", "user.email", GIT_USER_EMAIL], sandbox)
+        _run(["git", "config", "user.name", GIT_USER_NAME], sandbox)
+
     _run(["git", "config", "core.autocrlf", "false"], sandbox)
 
     rc, _, _ = _run(["git", "rev-parse", "--verify", base], sandbox)
@@ -77,6 +88,30 @@ def commit_all(sandbox: Path, message: str) -> CommitResult:
         branch=current_branch(sandbox),
         message=message,
     )
+
+
+def push_branch(sandbox: Path, branch: str, remote: str = "origin") -> tuple[bool, str]:
+    rc, out, err = _run(["git", "push", "-u", remote, branch], sandbox, timeout=120)
+    return rc == 0, (out + err).strip()
+
+
+def open_pr(sandbox: Path, branch: str, title: str, body: str) -> tuple[int | None, str]:
+    """Requires `gh` CLI authenticated. Returns (pr_number, url_or_error)."""
+    rc, out, err = _run(
+        ["gh", "pr", "create", "--head", branch, "--title", title, "--body", body],
+        sandbox,
+        timeout=60,
+    )
+    if rc != 0:
+        return None, err.strip()
+    # gh prints the PR URL on stdout
+    url = out.strip()
+    # Extract the number from the URL (…/pull/42)
+    try:
+        pr_number = int(url.rstrip("/").split("/")[-1])
+    except (ValueError, IndexError):
+        return None, url
+    return pr_number, url
 
 def diff_against(sandbox: Path, base: str = "main", head: str = "HEAD") -> str:
     rc, out, err = _run(["git", "diff", f"{base}..{head}"], sandbox, timeout=60)

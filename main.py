@@ -158,5 +158,21 @@ def main():
                     status=StepStatus.OK if commit.committed else StepStatus.EMPTY,
                 )
 
+    pushed, push_msg = git.push_branch(sandbox, branch)
+    if not pushed:
+        raise RuntimeError(f"push failed: {push_msg}")
+
+    pr_number, pr_url = git.open_pr(
+        sandbox, branch,
+        title=f"ai: {SPEC.strip().splitlines()[0][:60]}",
+        body=f"Automated change from run `{run_id[:8]}`.\n\nDiff: `artifacts/{run_id}/diff.patch`",
+    )
+    log_step(
+        run_id=run_id, step=RunStep.PR, turn=0, role="harness",
+        model="", temperature=0.0, input_summary=branch,
+        output=f"pr={pr_number} url={pr_url}",
+        status=StepStatus.OK if pr_number is not None else StepStatus.ERROR,
+    )
+
 if __name__ == "__main__":
     main()
