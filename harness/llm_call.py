@@ -77,8 +77,10 @@ def call_json(
     Returns (decision, items, ok): `decision` is the parsed object, `items` is
     decision[parse_key] as a list (scalars are wrapped as a single-item list,
     e.g. the selector's "chosen": 2), normalized when a normalizer is given.
-    On truncation or parse/type failure items is a single blocker dict and ok
-    is False. Logs exactly one trace row either way.
+    On truncation or parse/type failure — including a missing/null parse_key,
+    a wrongly typed value for a normalized key, or malformed entries discarded
+    by normalization — items is a single blocker dict and ok is False.
+    Logs exactly one trace row either way.
     """
     resp, duration_ms = _complete(role, messages, client)
     content = resp.choices[0].message.content or ""
@@ -93,10 +95,20 @@ def call_json(
             decision = parse_json_loose(content)
             if not isinstance(decision, dict):
                 raise TypeError(f"expected JSON object, got {type(decision).__name__}")
-            raw = decision.get(parse_key, [])
+            if parse_key not in decision or decision[parse_key] is None:
+                raise ValueError(f"missing or null {parse_key!r} in response")
+            raw = decision[parse_key]
             if not isinstance(raw, list):
-                raw = [raw]
+                if normalizer is not None:
+                    raise TypeError(
+                        f"expected list for {parse_key!r}, got {type(raw).__name__}"
+                    )
+                raw = [raw]  # scalar, e.g. the selector's "chosen": 2
             items = normalizer(raw) if normalizer else raw
+            if normalizer is not None and len(items) != len(raw):
+                raise ValueError(
+                    f"{parse_key!r} contained malformed entries discarded during normalization"
+                )
             ok = True
         except (json.JSONDecodeError, AttributeError, ValueError, TypeError) as exc:
             logging.warning("parse failed for step=%s: %s — raw[:300]=%r", step, exc, content[:300])

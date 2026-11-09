@@ -64,13 +64,22 @@ def _read_files(sandbox: Path, candidates: list[str]) -> tuple[dict[str, str], l
     truncated: list[str] = []
     total = 0
     for path in candidates:
-        p = Path(path)
-        if not p.is_absolute():
-            p = sandbox / p
-        if not p.is_file():
+        try:
+            p = Path(path)
+            if not p.is_absolute():
+                p = sandbox / p
+            resolved = p.resolve()
+        except OSError as exc:
+            logging.warning("review input: skipping unreadable candidate %s: %s", path, exc)
+            continue
+        if resolved != sandbox and sandbox not in resolved.parents:
+            logging.warning("review input: skipping candidate %s (resolves to %s, outside sandbox)",
+                            path, resolved)
+            continue
+        if not resolved.is_file():
             logging.warning("review input: file %s not found under %s", path, sandbox)
             continue
-        content = p.read_text(errors="replace")
+        content = resolved.read_text(errors="replace")
         if len(content) > MAX_FILE_CHARS:
             content = content[:MAX_FILE_CHARS]
             truncated.append(path)

@@ -127,14 +127,15 @@ def implement(plan: str, findings: list[dict], role: Role, run_id: str, client:o
                 else:
                     no_progress_streak = 0
                 write_history[path] = new_hash
+            result = dispatch_tool_call(tc)
+            if tc.function.name == "write_file" and result.startswith("OK:"):
                 try:
-                    args = json.loads(tc.function.arguments)
+                    args = json.loads(tc.function.arguments or "{}")
                     path = args.get("path")
                     if path:
                         files_written.append(path)
                 except (json.JSONDecodeError, AttributeError):
                     pass
-            result = dispatch_tool_call(tc)
             messages.append({
                 "role": "tool",
                 "tool_call_id": tc.id,

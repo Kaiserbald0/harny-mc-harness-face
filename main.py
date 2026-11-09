@@ -89,6 +89,7 @@ def main():
         role=IMPLEMENTER,
         max_turns=10,
     )
+    implementation_finished = result.finished
     diff, changed = "", []
     if not result.finished:
         print(f"WARN: implementer did not finish after {result.turns_used} turns")
@@ -115,6 +116,8 @@ def main():
                 status=StepStatus.OK if commit.committed else StepStatus.EMPTY,
             )
 
+    verify_result = None
+    blockers: list[dict] = []
     for cycle in range(MAX_FIX_CYCLES):
         verify_result = verify(sandbox, run_id=run_id, language="go")
         findings = review(
@@ -127,7 +130,7 @@ def main():
         if not blockers and verify_result.passed:
             break
         if cycle == MAX_FIX_CYCLES - 1:
-            print(f"WARN: still {len(blockers)} findings; proceeding anyway")
+            print(f"WARN: still {len(blockers)} findings after final fix cycle; refusing delivery")
             break
         result = implement(
             plan=revised_plan,
@@ -137,6 +140,7 @@ def main():
             role=IMPLEMENTER_FIX,
             max_turns=10,
         )
+        implementation_finished = implementation_finished and result.finished
         if not result.finished:
             print(f"WARN: implementer did not finish after {result.turns_used} turns")
             print(f"      files written so far: {result.files_written}")
@@ -157,6 +161,21 @@ def main():
                     output=f"commit={commit.sha[:8]} files={len(changed)} diff_bytes={len(diff)}",
                     status=StepStatus.OK if commit.committed else StepStatus.EMPTY,
                 )
+
+    if not implementation_finished:
+        raise RuntimeError(
+            f"implementation unfinished ({result.stopped_reason} after {result.turns_used} turns); "
+            "refusing to push or open a PR"
+        )
+    if verify_result is None or not verify_result.passed:
+        raise RuntimeError(
+            f"verification failed ({verify_result.summary if verify_result else 'not run'}); "
+            "refusing to push or open a PR"
+        )
+    if blockers:
+        raise RuntimeError(
+            f"{len(blockers)} blocker/major findings remain; refusing to push or open a PR"
+        )
 
     pushed, push_msg = git.push_branch(sandbox, branch)
     if not pushed:
