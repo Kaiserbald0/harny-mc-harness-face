@@ -15,7 +15,7 @@ The pipeline is:
 5. **Plan revision** — a critic–revise loop (max 2 cycles) checks the chosen plan against rules R1–R6 and fixes violations (`harness/run_revision.py`).
 6. **Implementation** — an implementer agent with file tools writes the code in the sandbox (`harness/implement.py`), then the harness commits and saves `artifacts/<run_id>/diff.patch`.
 7. **Fix loop** — up to `MAX_FIX_CYCLES` (2) rounds of deterministic verify → LLM review → re-implement.
-8. **Delivery** — push the branch and open a PR with the `gh` CLI.
+8. **Delivery** — push the branch and open a PR with the `gh` CLI, then poll the PR (`wait_for_merge_ready`, bounded: default 2 h timeout / 60 s interval) until it is merge-ready, needs orchestrator action (e.g. `CONFLICTING`, `CI_FAILED`, `CHANGES_REQUESTED`, `UNRESOLVED_THREADS`), or reaches a terminal state (`MERGED`, `CLOSED`, `TIMEOUT`).
 
 ## Technology stack and runtime architecture
 
@@ -46,6 +46,8 @@ harness/
                      typescript (tsc/vitest/eslint)
   review.py          LLM code review over diff + full files + manifest + check output
   git.py             Sandbox git ops: init/branch/commit/push, PR via `gh` CLI
+  pr.py              PR polling: snapshot + unresolved review threads (GraphQL),
+                     completion classifier, bounded wait_for_merge_ready loop
   tool.py            Sandbox filesystem tools with path-escape protection
   tool_dispatcher.py Dispatches OpenAI tool_call objects to the registry
   tool_schemas.py    OpenAI function schemas for the three tools
@@ -85,10 +87,11 @@ Running `main.py` end-to-end requires: a reachable LLM endpoint, the `go` toolch
 
 `tests/` contains **manual integration scripts, not a pytest suite** — most hit the live LLM API and cost tokens. There is no pytest installed in `.venv` and no CI.
 
-- `tests/test_json.py`, `tests/test_git.py` — cheap, no LLM; safe to run directly:
+- `tests/test_json.py`, `tests/test_git.py`, `tests/test_pr_poll.py` — cheap, offline, no LLM; safe to run directly:
   ```bash
   .venv/bin/python tests/test_json.py
-  .venv/bin/python tests/test_git.py   # creates /tmp/git-test-<uuid>
+  .venv/bin/python tests/test_git.py      # creates /tmp/git-test-<uuid>
+  .venv/bin/python tests/test_pr_poll.py  # mocked gh/clock, covers wait_for_merge_ready
   ```
 - `tests/test_critic.py`, `tests/test_implementation.py`, `tests/test_verify.py` — exercise single pipeline stages against the real API (they read `OPENROUTER_API_KEY`/`CRITIC_MODEL` etc. from `.env`); run them the same way, one at a time, while iterating on a stage.
 

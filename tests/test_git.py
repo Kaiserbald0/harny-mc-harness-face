@@ -1,5 +1,9 @@
-import uuid
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import uuid
 from harness import git
 
 run_id = str(uuid.uuid4())

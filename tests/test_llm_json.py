@@ -4,6 +4,11 @@ Offline: the OpenAI client is mocked. No live LLM calls.
 Run from repo root:  PYTHONPATH=. .venv/bin/python tests/test_llm_json.py
 """
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import json
 import unittest
 from types import SimpleNamespace

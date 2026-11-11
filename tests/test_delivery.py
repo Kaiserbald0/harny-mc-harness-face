@@ -4,6 +4,11 @@ Offline: all LLM/git/verify stages are mocked. No push or PR can happen.
 Run from repo root:  PYTHONPATH=. .venv/bin/python tests/test_delivery.py
 """
 
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import os
 import tempfile
 import unittest
@@ -13,6 +18,7 @@ from unittest import mock
 
 import main
 from harness.implement import ImplementationResult
+from harness.pr import CompletionResult
 from harness.verify import VerifyResult
 
 
@@ -72,6 +78,9 @@ class DeliveryGateTests(unittest.TestCase):
         self.open_pr = mock.patch("main.git.open_pr").start()
         self.open_pr.return_value = (1, "https://example/pr/1")
         self.addCleanup(self.open_pr.stop)
+        self.wait = mock.patch("main.wait_for_merge_ready").start()
+        self.wait.return_value = (None, CompletionResult(True, "MERGE_READY"))
+        self.addCleanup(self.wait.stop)
 
     def _run(self, implement_side_effect, verify_result, findings):
         with mock.patch("main.implement", side_effect=implement_side_effect), \
@@ -116,6 +125,13 @@ class DeliveryGateTests(unittest.TestCase):
         self._run([finished_result()], VERIFY_PASS, [])
         self.push_branch.assert_called_once()
         self.open_pr.assert_called_once()
+        self.wait.assert_called_once()
+
+    def test_no_pr_number_skips_polling(self):
+        self.open_pr.return_value = (None, "")
+        self._run([finished_result()], VERIFY_PASS, [])
+        self.push_branch.assert_called_once()
+        self.wait.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from harness.selector import selector
 from harness.verify import verify
 from harness.tool import sandbox_root
 from harness.memory import load_skills, format_for_prompt
+from harness.pr import wait_for_merge_ready
 from harness.trace import log_step, RunStep, StepStatus
 
 SPEC = """
@@ -192,6 +193,21 @@ def main():
         output=f"pr={pr_number} url={pr_url}",
         status=StepStatus.OK if pr_number is not None else StepStatus.ERROR,
     )
+
+    if pr_number is not None:
+        final_state, completion = wait_for_merge_ready(sandbox, pr_number)
+        logging.info(
+            "PR %s ended in state %s (blockers: %s)",
+            pr_number,
+            completion.state,
+            "; ".join(completion.blockers) or "none",
+        )
+        log_step(
+            run_id=run_id, step=RunStep.PR, turn=0, role="harness",
+            model="", temperature=0.0, input_summary=f"pr={pr_number}",
+            output=f"state={completion.state} blockers={completion.blockers}",
+            status=StepStatus.OK if completion.complete else StepStatus.ERROR,
+        )
 
 if __name__ == "__main__":
     main()
