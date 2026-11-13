@@ -10,13 +10,14 @@ from harness import git
 from harness.get_plans import get_plans
 from harness.implement import implement
 from harness.review import review
-from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE, IMPLEMENTER, REVIEWER, IMPLEMENTER_FIX
+from harness.role import PLANNER_CONSERVATIVE, PLANNER_EXPLORATIVE, IMPLEMENTER, REVIEWER, IMPLEMENTER_FIX, PR_REVIEWER
 from harness.run_revision import run_revision
 from harness.selector import selector
 from harness.verify import verify
 from harness.tool import sandbox_root
 from harness.memory import load_skills, format_for_prompt
-from harness.pr import wait_for_merge_ready
+from harness.pr import wait_for_merge_ready, unresolved_threads, resolve_review_threads
+from harness.pr_review import pr_review, filter_actionable, format_review_comment, threads_to_findings
 from harness.trace import log_step, RunStep, StepStatus
 
 SPEC = """
@@ -24,6 +25,7 @@ Build a simple API using golang. The APi is an health check for the service so i
 """
 
 MAX_FIX_CYCLES = 2
+MAX_PR_FIX_CYCLES = 2
 
 def main():
     load_dotenv()
@@ -193,6 +195,105 @@ def main():
         output=f"pr={pr_number} url={pr_url}",
         status=StepStatus.OK if pr_number is not None else StepStatus.ERROR,
     )
+
+    if pr_number is not None:
+        # Machine PR review: skeptical agent posts comment reviews (own PRs
+        # cannot be approved/change-requested), then a fix loop drains the
+        # unresolved threads it created. Convergence signal = zero unresolved
+        # threads, never review_decision.
+        pr_findings = pr_review(
+            spec=spec_with_skills, plan=revised_plan, path=sandbox,
+            verify_result=verify_result, role=PR_REVIEWER,
+            run_id=run_id, files_written=result.files_written, client=client,
+            diff=diff,
+        )
+        actionable = filter_actionable(pr_findings)
+        log_step(
+            run_id=run_id, step=RunStep.PR_REVIEW, turn=0, role="harness",
+            model="", temperature=0.0, input_summary=f"pr={pr_number}",
+            output=f"{len(pr_findings)} findings, {len(actionable)} actionable",
+            status=StepStatus.OK if pr_findings else StepStatus.EMPTY,
+        )
+        if actionable:
+            posted = 0
+            for f in actionable:
+                ok_c, msg = git.post_pr_comment(sandbox, pr_number, format_review_comment(f))
+                log_step(
+                    run_id=run_id, step=RunStep.PR, turn=0, role="harness",
+                    model="", temperature=0.0,
+                    input_summary=f"pr={pr_number} [{f['rule']}] {f['title'][:80]}",
+                    output=msg,
+                    status=StepStatus.OK if ok_c else StepStatus.ERROR,
+                )
+                posted += ok_c
+            print(f"\n=== posted {posted}/{len(actionable)} PR review comments ===")
+
+            for cycle in range(MAX_PR_FIX_CYCLES):
+                threads = unresolved_threads(sandbox, pr_number)
+                if not threads:
+                    break
+                findings = threads_to_findings(threads)
+                print(f"\n=== PR fix cycle {cycle}: {len(threads)} unresolved thread(s) ===")
+                result = implement(
+                    plan=revised_plan,
+                    findings=findings,
+                    client=client,
+                    run_id=run_id,
+                    role=IMPLEMENTER_FIX,
+                    max_turns=10,
+                )
+                if not result.finished:
+                    print(f"WARN: PR fix implementer did not finish ({result.stopped_reason}); "
+                          f"files written: {result.files_written}")
+                if not result.files_written:
+                    print("WARN: PR fix cycle wrote no files; leaving threads unresolved")
+                    log_step(
+                        run_id=run_id, step=RunStep.PR_FIX, turn=cycle, role="harness",
+                        model="", temperature=0.0, input_summary=f"pr={pr_number}",
+                        output=f"no files written for {len(threads)} thread(s); not resolving",
+                        status=StepStatus.EMPTY,
+                    )
+                    break
+                commit = git.commit_all(
+                    sandbox,
+                    message=f"ai: address PR review — cycle {cycle}, {len(findings)} findings",
+                )
+                diff = git.diff_against(sandbox, base="main")
+                fix_verify = verify(sandbox, run_id=run_id, language="go")
+                log_step(
+                    run_id=run_id, step=RunStep.GIT, turn=0, role="harness",
+                    model="", temperature=0.0, input_summary=branch,
+                    output=f"commit={commit.sha[:8]} files={len(result.files_written)} verify={'pass' if fix_verify.passed else 'FAIL'}",
+                    status=StepStatus.OK if commit.committed and fix_verify.passed else StepStatus.ERROR,
+                )
+                if not fix_verify.passed:
+                    print(f"WARN: verify failed after PR fix cycle {cycle}; "
+                          "not pushing or resolving threads")
+                    break
+                pushed, push_msg = git.push_branch(sandbox, branch)
+                if not pushed:
+                    print(f"WARN: push failed after PR fix cycle {cycle}: {push_msg}")
+                    break
+                resolved, failed = resolve_review_threads(
+                    sandbox, [t.thread_id for t in threads]
+                )
+                log_step(
+                    run_id=run_id, step=RunStep.PR_FIX, turn=cycle, role="harness",
+                    model="", temperature=0.0, input_summary=f"pr={pr_number}",
+                    output=f"cycle={cycle} threads={len(threads)} fixed={len(findings)} "
+                           f"commit={commit.sha[:8]} pushed={pushed} resolved={resolved} failed={failed}",
+                    status=StepStatus.OK if failed == 0 else StepStatus.ERROR,
+                )
+            remaining = unresolved_threads(sandbox, pr_number)
+            if remaining:
+                print(f"WARN: {len(remaining)} unresolved thread(s) remain after "
+                      f"{MAX_PR_FIX_CYCLES} PR fix cycles")
+                log_step(
+                    run_id=run_id, step=RunStep.PR_FIX, turn=MAX_PR_FIX_CYCLES, role="harness",
+                    model="", temperature=0.0, input_summary=f"pr={pr_number}",
+                    output=f"{len(remaining)} thread(s) unresolved after {MAX_PR_FIX_CYCLES} cycles",
+                    status=StepStatus.ERROR,
+                )
 
     if pr_number is not None:
         final_state, completion = wait_for_merge_ready(sandbox, pr_number)

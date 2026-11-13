@@ -23,6 +23,7 @@ class PRComment:
     path: str
     line: int | None
     url: str
+    thread_id: str = ""
 
 
 @dataclass
@@ -45,6 +46,7 @@ query($owner: String!, $name: String!, $number: Int!) {
     pullRequest(number: $number) {
       reviewThreads(first: 100) {
         nodes {
+          id
           isResolved
           comments(first: 1) {
             nodes { body author { login } path line url }
@@ -101,8 +103,44 @@ def _fetch_unresolved_comments(sandbox: Path, pr_number: int) -> list[PRComment]
             path=c.get("path") or "",
             line=c.get("line"),
             url=c.get("url") or "",
+            thread_id=t.get("id") or "",
         ))
     return comments
+
+
+def unresolved_threads(sandbox: Path, pr_number: int) -> list[PRComment]:
+    """Unresolved review threads on an open PR (empty if the PR is not open)."""
+    return _fetch_unresolved_comments(sandbox, pr_number)
+
+
+_RESOLVE_THREAD_MUTATION = """
+mutation($threadId: ID!) {
+  resolveReviewThread(input: {threadId: $threadId}) {
+    thread { isResolved }
+  }
+}
+"""
+
+
+def resolve_review_threads(sandbox: Path, thread_ids: list[str]) -> tuple[int, int]:
+    """Resolve review threads by GraphQL id. Returns (resolved, failed)."""
+    resolved = failed = 0
+    for tid in thread_ids:
+        if not tid:
+            failed += 1
+            continue
+        rc, out, err = _run(
+            ["gh", "api", "graphql",
+             "-f", f"query={_RESOLVE_THREAD_MUTATION}",
+             "-F", f"threadId={tid}"],
+            sandbox,
+        )
+        if rc == 0:
+            resolved += 1
+        else:
+            failed += 1
+            logging.warning("resolveReviewThread failed for %s: %s", tid, (out + err)[:300])
+    return resolved, failed
 
 
 def poll_pr_state(sandbox: Path, pr_number: int) -> PRState | None:

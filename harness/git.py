@@ -1,6 +1,7 @@
 import logging
 import os
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -112,6 +113,25 @@ def open_pr(sandbox: Path, branch: str, title: str, body: str) -> tuple[int | No
     except (ValueError, IndexError):
         return None, url
     return pr_number, url
+
+def post_pr_comment(sandbox: Path, pr_number: int, body: str) -> tuple[bool, str]:
+    """Post a --comment review on the PR. Own PRs cannot be approved or
+    change-requested, so the machine review is always a comment review.
+    Returns (ok, message)."""
+    tmp = Path(tempfile.mkstemp(suffix=".md")[1])
+    try:
+        tmp.write_text(body)
+        rc, out, err = _run(
+            ["gh", "pr", "review", str(pr_number), "--comment", "--body-file", str(tmp)],
+            sandbox,
+            timeout=60,
+        )
+    finally:
+        tmp.unlink(missing_ok=True)
+    if rc != 0:
+        return False, (out + err).strip()[:500]
+    return True, (out or "comment posted").strip()[:500]
+
 
 def diff_against(sandbox: Path, base: str = "main", head: str = "HEAD") -> str:
     rc, out, err = _run(["git", "diff", f"{base}..{head}"], sandbox, timeout=60)
