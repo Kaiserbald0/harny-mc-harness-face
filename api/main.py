@@ -56,6 +56,26 @@ def list_runs(
         reader.close()
 
 
+@app.get("/api/runs/{run_id}")
+def get_run(run_id: str):
+    """One run's summary row."""
+    reader = get_reader()
+    try:
+        cur = reader.execute(
+            "SELECT run_id, spec, status, created_at, completed_at,"
+            " pr_number, pr_url FROM runs WHERE run_id = ?",
+            (run_id,),
+        )
+        record = cur.fetchone()
+        if not record:
+            raise HTTPException(status_code=404, detail=f"no run {run_id}")
+        columns = ("run_id", "spec", "status", "created_at", "completed_at",
+                   "pr_number", "pr_url")
+        return _row_to_dict(columns, record)
+    finally:
+        reader.close()
+
+
 @app.get("/api/runs/{run_id}/trace")
 def get_run_trace(run_id: str):
     """All trace rows for one run, ordered by timestamp."""

@@ -1,13 +1,20 @@
+import { Link, Outlet } from 'react-router-dom'
 import './App.css'
 
 function App() {
   return (
     <>
-      <section id="center">
+      <section id="header">
         <div>
-          <h1>Harny MC Harness Face</h1>
+          <h1>
+            <Link to="/">Harny MC Harness Face</Link>
+          </h1>
         </div>
       </section>
+
+      <div className="ticks"></div>
+
+      <Outlet />
 
       <div className="ticks"></div>
 
