@@ -27,20 +27,11 @@ Build a simple API using golang. The APi is an health check for the service so i
 MAX_FIX_CYCLES = 2
 MAX_PR_FIX_CYCLES = 2
 
-def main():
-    load_dotenv()
-
-    logging.basicConfig(
-        level=os.getenv("LOG_LEVEL", "INFO").upper(),
-        format="%(asctime)s - %(levelname)s - %(message)s"
-    )
-
-    client = OpenAI(
-        base_url=os.getenv("LLM_API_ENDPOINT"),
-        api_key=os.getenv("LLM_API_KEY"),
-    )
-
-    run_id = str(uuid.uuid4())
+def _run_pipeline(run_id: str, client: OpenAI) -> tuple[str, int | None, str | None]:
+    """Run the pipeline body. Returns (final_status, pr_number, pr_url)."""
+    pr_number = None
+    pr_url = None
+    status = "complete"
 
     sandbox = sandbox_root()
     git.ensure_repo(sandbox)
@@ -309,6 +300,41 @@ def main():
             output=f"state={completion.state} blockers={completion.blockers}",
             status=StepStatus.OK if completion.complete else StepStatus.ERROR,
         )
+        if not completion.complete:
+            status = "stuck"
+    return status, pr_number, pr_url
+
+
+def main():
+    load_dotenv()
+
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO").upper(),
+        format="%(asctime)s - %(levelname)s - %(message)s"
+    )
+
+    client = OpenAI(
+        base_url=os.getenv("LLM_API_ENDPOINT"),
+        api_key=os.getenv("LLM_API_KEY"),
+    )
+
+    run_id = str(uuid.uuid4())
+
+    from harness import db
+    db.init_db()
+    db.create_run(run_id, SPEC)
+
+    try:
+        status, pr_number, pr_url = _run_pipeline(run_id, client)
+    except Exception:
+        status, pr_number, pr_url = "failed", None, None
+        raise
+    finally:
+        db.finish_run(run_id, status=status, pr_number=pr_number, pr_url=pr_url)
+        export_path = Path("artifacts") / run_id / "trace.jsonl"
+        export_path.parent.mkdir(parents=True, exist_ok=True)
+        db.export_run_jsonl(run_id, export_path)
+
 
 if __name__ == "__main__":
     main()

@@ -1,13 +1,10 @@
-import os
 import time
 from enum import Enum
 
 from pydantic import BaseModel, Field
 from typing import Any
 
-TRACE_PATH = os.getenv("TRACE_PATH", "trace.jsonl")
-if not TRACE_PATH:
-    raise ValueError("TRACE_PATH environment variable is not set")
+from harness import db
 
 class StepStatus(str, Enum):
     OK = "ok"
@@ -58,5 +55,4 @@ class TraceRow(BaseModel):
 
 def log_step(**fields):
     row = TraceRow(**fields)
-    with open(TRACE_PATH, "a") as f:
-        f.write(row.model_dump_json() + "\n")
+    db.insert_trace_row(row)

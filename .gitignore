@@ -3,7 +3,11 @@ __pycache__/
 *.pyc
 .env
 trace.jsonl
+trace.db
+trace.db-wal
+trace.db-shm
 memory/staging/.vscode/
 .idea
 sandbox/
 artifacts/
+*.log
