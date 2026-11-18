@@ -159,6 +159,5 @@ When changing a pipeline stage, prefer editing and running the matching script o
 
 ## Known rough edges (do not "fix" silently)
 
-- `README.md` contains only the project name — it is a stub. `ui/README.md` is the unmodified Vite template README.
 - `tests/test_verify.py` calls `review(...)` without the required `diff` argument and imports from `main.py`; it predates the current signatures and needs updating if you want it to run.
 - `requirements.txt` pins `httpx2`/`httpcore2` (nonstandard names) — this is what the venv actually has installed; treat as intentional unless the owner says otherwise.
